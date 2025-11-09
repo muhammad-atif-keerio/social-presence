@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================================
+// CORE PROFILE MODEL
+// ============================================================================
+// Main profile table - stores user's public profile information
+model Profile {
+  id          String   @id @default(cuid())
+  userId      String?  @unique // Optional: Link to Clerk user ID
+  username    String   @unique
+  name        String
+  bio         String?
+  location    String?
+  avatarUrl   String?
+  statusText  String   @default("currently doing nothing")
+  videoUrl    String?  // YouTube video ID or URL
+  viewCount   Int      @default(0)
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime? // Soft delete support
+  
+  // Relations
+  socialLinks     SocialLink[]
+  apiIntegrations ApiIntegration[]
+  activityLogs    ActivityLog[]
+  viewLogs        ViewLog[]
+  settings        ProfileSettings?
+  
+  // Indexes
+  @@index([username])
+  @@index([userId])
+  @@index([deletedAt])
+  @@map("profiles")
+}
+
+// ============================================================================
+// SOCIAL LINKS MODEL
+// ============================================================================
+// Normalized social media links - supports unlimited platforms
+model SocialLink {
+  id          String   @id @default(cuid())
+  profileId   String
+  platform    String   // 'discord', 'github', 'spotify', 'twitter', 'instagram', etc.
+  url         String
+  displayName String?  // Custom display name (e.g., "My GitHub")
+  icon        String?  // Icon name or URL
+  displayOrder Int     @default(0) // For custom ordering
+  isActive    Boolean  @default(true)
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  
+  // Constraints
+  @@unique([profileId, platform]) // One link per platform per profile
+  @@index([profileId, isActive])
+  @@index([platform])
+  @@map("social_links")
+}
+
+// ============================================================================
+// API INTEGRATIONS MODEL
+// ============================================================================
+// Stores OAuth tokens and credentials for external API integrations
+// Supports: Spotify, Discord, GitHub, Steam, etc.
+model ApiIntegration {
+  id            String   @id @default(cuid())
+  profileId     String
+  provider      String   // 'spotify', 'discord', 'github', 'steam', etc.
+  
+  // OAuth tokens (encrypted in application layer)
+  accessToken   String?  @db.Text
+  refreshToken  String?  @db.Text
+  tokenType     String?  @default("Bearer")
+  expiresAt     DateTime?
+  scope         String?  // OAuth scopes granted
+  
+  // Provider-specific data (JSON)
+  providerData  Json?    // Store additional provider-specific data
+  
+  // Status
+  isActive      Boolean  @default(true)
+  lastSyncAt    DateTime? // Last successful API sync
+  lastError     String?  @db.Text // Last error message if sync failed
+  
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  profile       Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  
+  // Constraints
+  @@unique([profileId, provider]) // One integration per provider per profile
+  @@index([profileId, isActive])
+  @@index([provider])
+  @@index([expiresAt]) // For token refresh queries
+  @@map("api_integrations")
+}
+
+// ============================================================================
+// ACTIVITY LOG MODEL
+// ============================================================================
+// Tracks dynamic activity updates (Spotify tracks, Discord status, etc.)
+// Enables activity history and analytics
+model ActivityLog {
+  id            String   @id @default(cuid())
+  profileId     String
+  activityType  String   // 'spotify_track', 'discord_status', 'github_commit', 'steam_game', etc.
+  title         String   // Track name, game name, commit message, etc.
+  description   String?  // Additional details
+  metadata      Json?    // Flexible JSON for activity-specific data
+  // Example metadata:
+  // - Spotify: { artist, album, albumArt, duration, progress }
+  // - Discord: { status, game, activity }
+  // - GitHub: { repo, branch, commitHash }
+  // - Steam: { gameId, hours, achievements }
+  
+  // Timestamps
+  startedAt     DateTime @default(now())
+  endedAt       DateTime? // When activity ended (null = currently active)
+  createdAt     DateTime @default(now())
+  
+  // Relations
+  profile       Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  
+  // Indexes
+  @@index([profileId, activityType, startedAt])
+  @@index([profileId, endedAt]) // For active activities
+  @@index([activityType])
+  @@map("activity_logs")
+}
+
+// ============================================================================
+// VIEW LOG MODEL
+// ============================================================================
+// Tracks page views for analytics (optional - can be aggregated)
+model ViewLog {
+  id            String   @id @default(cuid())
+  profileId     String
+  
+  // Visitor information (privacy-conscious)
+  ipAddress     String?  // Optional: for basic analytics
+  userAgent     String?  // Browser/device info
+  referer       String?  // Where visitor came from
+  country       String?  // From IP geolocation (optional)
+  
+  // Timestamps
+  viewedAt      DateTime @default(now())
+  
+  // Relations
+  profile       Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  
+  // Indexes
+  @@index([profileId, viewedAt])
+  @@index([viewedAt]) // For time-based analytics
+  @@map("view_logs")
+}
+
+// ============================================================================
+// PROFILE SETTINGS MODEL
+// ============================================================================
+// Stores user preferences and configuration
+model ProfileSettings {
+  id            String   @id @default(cuid())
+  profileId     String   @unique
+  
+  // Display settings
+  theme         String?  @default("dark") // 'dark', 'light', 'auto'
+  showViewCount Boolean  @default(true)
+  showActivity  Boolean  @default(true)
+  showSocialLinks Boolean @default(true)
+  
+  // Video settings
+  videoAutoplay Boolean  @default(true)
+  videoLoop     Boolean  @default(true)
+  videoMuted    Boolean  @default(true)
+  
+  // Update frequency
+  pollInterval  Int?     @default(30) // Seconds between API polls
+  
+  // Custom settings (JSON for extensibility)
+  customSettings Json?
+  
+  // Timestamps
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  profile       Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  
+  @@map("profile_settings")
+}
+
