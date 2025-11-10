@@ -1,0 +1,22 @@
+{
+  "name": "Muhammad Atif Keerio - Fullstack Developer & AI Engineer",
+  "short_name": "Muhammad Atif",
+  "description": "Social presence page for Muhammad Atif Keerio (.AADI.) - Fullstack Developer & AI Engineer crafting innovative solutions",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "en-US",
+  "dir": "ltr",
+  "categories": ["developer", "portfolio", "technology"],
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ]
+}
+
